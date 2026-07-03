@@ -3,7 +3,7 @@
 # Please provide the destnation conda env path (appEnvPath) below
 # if SSL certificate (../...crt) needs to be added into this conda env,
 # please export environment variabble "CONDA_SSL" with the path to the certificate file
-appEnvPath="${1:-~/.conda/envs/VIP}"
+appEnvPath="${1:-~/miniforge3/envs/VIP}"
 appEnvPath=$(realpath ${appEnvPath/\~/$HOME})
 
 echo -e "\nInstallation location (first position parameter): $appEnvPath"

@@ -15,6 +15,7 @@ COPY env_yml/VIPlight_versioned.yml vipdocker/build/install_VIPlight_indocker.sh
 COPY vipdocker/build/respatch/* .
 COPY vipdocker/build/plottings/* .
 COPY gsea/ .
+COPY gateway_patch/ gateway_patch/
 
 # install packages
 RUN ./install_VIPlight_indocker.sh

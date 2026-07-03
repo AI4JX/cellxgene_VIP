@@ -37,7 +37,7 @@ rm -fr cellxgene
 
 # install the rest of packages
 echo "Update env ..."
-mamba env update -n vip -f VIPlight_local.yml
+mamba env update -n vip -f VIPlight_local.yml 
 conda list scanpy
 
 
@@ -94,5 +94,13 @@ rm common/config/server_config.py
 ln -s $exePath/server_config.py common/config/server_config.py
 rm cli/launch.py
 ln -s $exePath/launch.py cli/launch.py
+
+# ---------- adopt gateway_patch for cellxgene_gateway -------------- #
+echo "Add gateway patches ..."
+gatewayPath="$(python -c 'import cellxgene_gateway; import os; print(os.path.dirname(cellxgene_gateway.__file__))')"
+cp $exePath/gateway_patch/fileitem_source.py $gatewayPath/items/file/fileitem_source.py
+cp $exePath/gateway_patch/gateway.py $gatewayPath/gateway.py
+cp $exePath/gateway_patch/gateway.js $gatewayPath/static/js/gateway.js
+cp $exePath/gateway_patch/gateway.css $gatewayPath/static/css/gateway.css
 rm app/app.py
 ln -s $exePath/app.py app/app.py
