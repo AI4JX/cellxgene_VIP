@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>cellxgene VIP Gateway - Datasets</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/gateway.css') }}">
+<meta name="gateway-username" content="{{ username }}">
+<meta name="gateway-is-admin" content="{{ 'true' if is_admin else 'false' }}">
+{% for script in extra_scripts %}
+<script src="{{ script }}"></script>
+{% endfor %}
+</head>
+<body>
+<nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+  <div class="container-fluid">
+    <a class="navbar-brand" href="/"><i class="bi bi-grid me-2"></i>cellxgene VIP Gateway</a>
+    <div class="d-flex align-items-center gap-2">
+      <a class="nav-link" href="{{ url_for('do_GET_status') }}">Cache Status</a>
+      <a class="nav-link d-none" id="adminLink" href="/admin"><i class="bi bi-gear me-1"></i>Admin</a>
+      <button class="btn btn-outline-light btn-sm" id="themeToggle" title="Toggle dark mode"><i class="bi bi-moon"></i></button>
+      <div class="dropdown">
+        <button class="btn btn-outline-light btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown">
+          <i class="bi bi-person-circle me-1"></i><span id="navbarUsername">{{ username }}</span>
+        </button>
+        <ul class="dropdown-menu dropdown-menu-end">
+          <li><button class="dropdown-item" id="logoutBtn"><i class="bi bi-box-arrow-right me-1"></i>Logout</button></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</nav>
+
+<div class="container-fluid mt-3">
+  <div class="row mb-3 align-items-end">
+    <div class="col-md-4">
+      <input type="text" class="form-control" id="searchInput" placeholder="Search datasets...">
+    </div>
+    <div class="col-md-2">
+      <select class="form-select" id="sortSelect">
+        <option value="name">Sort by Name</option>
+        <option value="size">Sort by Size</option>
+        <option value="mtime">Sort by Modified</option>
+        <option value="status">Sort by Status</option>
+      </select>
+    </div>
+    <div class="col-md-2">
+      <button class="btn btn-outline-secondary w-100" id="refreshBtn"><i class="bi bi-arrow-clockwise"></i> Refresh</button>
+    </div>
+    <div class="col-md-2">
+      <button class="btn btn-outline-success w-100" id="newFolderBtn"><i class="bi bi-folder-plus"></i> New Folder</button>
+    </div>
+    <div class="col-md-2 d-flex align-items-center">
+      <span id="datasetCount" class="text-muted small"></span>
+    </div>
+  </div>
+
+  <div id="datasetGrid">
+    <div class="text-center py-5">
+      <div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div>
+      <p class="mt-2 text-muted">Loading datasets...</p>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="confirmModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Confirm</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="confirmBody">Are you sure?</div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-danger" id="confirmBtn">Confirm</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="newFolderModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-folder-plus me-2"></i>New Folder</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div id="newFolderAlert" class="alert alert-danger d-none"></div>
+        <div class="mb-3">
+          <label class="form-label">Folder Name</label>
+          <input type="text" class="form-control" id="newFolderName" placeholder="e.g. scRNA_heart">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" id="createFolderBtn">Create Folder</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="moveModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-arrows-move me-2"></i>Move Dataset</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div id="moveAlert" class="alert alert-danger d-none"></div>
+        <p id="moveDatasetLabel" class="mb-2"></p>
+        <div class="mb-3">
+          <label class="form-label">Target Folder</label>
+          <select class="form-select" id="moveTargetFolder">
+            <option value="">Root (no subfolder)</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" id="moveConfirmBtn">Move Dataset</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="{{ url_for('static', filename='js/gateway.js') }}"></script>
+</body>
+</html>

@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>cellxgene VIP Gateway - Cache Status</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/gateway.css') }}">
+{% for script in extra_scripts %}
+<script src="{{ script }}"></script>
+{% endfor %}
+</head>
+<body>
+<nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+  <div class="container-fluid">
+    <a class="navbar-brand" href="/">cellxgene VIP Gateway</a>
+    <div class="navbar-nav ms-auto">
+      <a class="nav-link" href="{{ url_for('filecrawl') }}">Datasets</a>
+      <button class="btn btn-outline-light btn-sm ms-2" id="themeToggle"><i class="bi bi-moon"></i></button>
+    </div>
+  </div>
+</nav>
+<div class="container-fluid mt-3">
+  <h4>Cache Status</h4>
+  <div class="table-responsive">
+    <table class="table table-striped align-middle" id="statusTable">
+      <thead>
+        <tr>
+          <th>Dataset</th>
+          <th>Annotations</th>
+          <th>Source</th>
+          <th>Port</th>
+          <th>Launched</th>
+          <th>Last Access</th>
+          <th>Status</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for entry in entry_list %}
+        <tr>
+          <td><a href="{{ entry.key.view_url }}/" class="text-decoration-none">{{ entry.key.h5ad_item.descriptor }}</a></td>
+          <td>{{ entry.key.annotation_descriptor or "—" }}</td>
+          <td>{{ entry.source_name }}</td>
+          <td>{{ entry.port }}</td>
+          <td class="timestamp">{{ entry.launchtime }}</td>
+          <td class="timestamp">{{ entry.timestamp }}</td>
+          <td>
+            {% if entry.status.name == 'loaded' %}
+              <span class="badge bg-success">Loaded</span>
+            {% elif entry.status.name == 'loading' %}
+              <span class="badge bg-warning text-dark">Loading</span>
+            {% elif entry.status.name == 'error' %}
+              <span class="badge bg-danger">Error</span>
+            {% else %}
+              <span class="badge bg-secondary">{{ entry.status.name }}</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if entry.status.name == 'loaded' or entry.status.name == 'error' %}
+              <a href="{{ url_for('do_terminate', path=entry.key.descriptor, source_name=entry.key.source_name) }}" class="btn btn-sm btn-outline-danger">Terminate</a>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+        {% if not entry_list %}
+        <tr><td colspan="8" class="text-center text-muted py-3">No running processes.</td></tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+(function() {
+  const saved = localStorage.getItem('gatewayTheme');
+  if (saved) document.documentElement.setAttribute('data-bs-theme', saved);
+  document.getElementById('themeToggle')?.addEventListener('click', () => {
+    const html = document.documentElement;
+    const cur = html.getAttribute('data-bs-theme');
+    html.setAttribute('data-bs-theme', cur === 'dark' ? 'light' : 'dark');
+    localStorage.setItem('gatewayTheme', html.getAttribute('data-bs-theme'));
+  });
+  document.querySelectorAll('.timestamp').forEach(el => {
+    const ts = parseInt(el.textContent);
+    if (!isNaN(ts)) {
+      const dt = new Date(ts * 1000);
+      el.textContent = dt.toISOString().replace('T', ' ').slice(0, 19);
+    }
+  });
+})();
+</script>
+</body>
+</html>

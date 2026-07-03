@@ -13,11 +13,25 @@ RUN mkdir /home/BxGenomics;chown share:share /home/BxGenomics
 WORKDIR /home/BxGenomics
 COPY env_yml/VIPlight_versioned.yml vipdocker/build/install_VIPlight_indocker.sh .
 COPY vipdocker/build/respatch/* .
-COPY vipdocker/build/plottings/* .
 COPY gsea/ .
 
 # install packages
 RUN ./install_VIPlight_indocker.sh
+
+# runtime R scripts & UI (moved after install to avoid cache invalidation)
+COPY vipdocker/build/plottings/* .
+
+# install cellxgene-gateway (before switching to share user)
+COPY vip-gateway/ vip-gateway/
+RUN /opt/conda/envs/vip/bin/pip install ./vip-gateway && rm -rf vip-gateway
+
+# pre-create tmp dirs and gateway db dir for share user
+RUN mkdir -p /home/BxGenomics/scRNAview/tmp/.numba_cache \
+             /home/BxGenomics/scRNAview/tmp/.matplotlib \
+             /home/BxGenomics/scRNAview/tmp/.fontconfig \
+             /home/BxGenomics/.gateway \
+ && chown -R share:share /home/BxGenomics/scRNAview /home/BxGenomics/.gateway
+
 USER share
 VOLUME /home/BxGenomics/scRNAview
 ENV PATH="/opt/conda/envs/vip/bin:${PATH}"

@@ -1,11 +1,21 @@
 #!/usr/bin/env bash
 set -e
 
-# Default base command
+# Ensure writable cache/tmp directories exist
+mkdir -p /home/BxGenomics/scRNAview/tmp/.numba_cache
+mkdir -p /home/BxGenomics/scRNAview/tmp/.matplotlib
+mkdir -p /home/BxGenomics/scRNAview/tmp/.fontconfig
+
+# Gateway mode
+if [[ "${1:-}" == "gateway" ]]; then
+    shift
+    exec cellxgene-gateway "$@"
+fi
+
+# Default mode: cellxgene launch
 BASE_CMD=(launch)
 BASE_FLG=(--host 0.0.0.0 --max-category-items 500 --disable-annotations --backed --disable-gene-sets-save)
 
-# Detect dataset
 DATASET=""
 for arg in "$@"; do
     if [[ "$arg" == *.h5ad ]]; then
@@ -15,14 +25,11 @@ for arg in "$@"; do
 done
 
 if [[ -n "$DATASET" ]]; then
-    # Remove dataset from "$@" so it doesn't appear twice
     CLEAN_ARGS=()
     for arg in "$@"; do
         [[ "$arg" == "$DATASET" ]] || CLEAN_ARGS+=("$arg")
     done
-
     exec cellxgene "${BASE_CMD[@]}" "$DATASET" "${BASE_FLG[@]}" "${CLEAN_ARGS[@]}"
 else
-    # No dataset → pass through unchanged (help, version, etc.)
     exec cellxgene "$@"
 fi
