@@ -221,8 +221,8 @@
                 <div class="settings-panel mt-2" id="settings-${ds.descriptor.replace(/[^a-zA-Z0-9_-]/g, '_')}" style="display:none">
                   <div class="input-group input-group-sm">
                     <label class="input-group-text">Default embedding</label>
-                    <select class="form-select form-select-sm emb-select" data-descriptor="${ds.descriptor}" data-source="${ds.source || ''}"></select>
-                    <button class="btn btn-outline-primary btn-sm emb-save-btn" data-descriptor="${ds.descriptor}" data-source="${ds.source || ''}">Save</button>
+                    <select class="form-select form-select-sm emb-select" data-descriptor="${ds.descriptor}" data-source="${qs(ds)}"></select>
+                    <button class="btn btn-outline-primary btn-sm emb-save-btn" data-descriptor="${ds.descriptor}" data-source="${qs(ds)}">Save</button>
                   </div>
                   <div class="form-text emb-status small"></div>
                 </div>
