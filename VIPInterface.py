@@ -47,29 +47,14 @@ rcParams.update({'figure.autolayout': True})
 
 api_version = "/api/v0.2"
 
-import threading
-jobLock = threading.Lock()
-def getLock(lock):
-    while not lock.acquire():
-        time.sleep(1.0)
-def freeLock(lock):
-  lock.release()
-
 def route(data,appConfig):
   data = initialization(data,appConfig)
-  #ppr.pprint(appConfig.server_config.single_dataset__datapath)
-  #ppr.pprint(data)
   try:
-    getLock(jobLock)
-    setTimeStamp(data, appConfig.dataset_config.app__identifier) # pass identifier to name timestamp file
+    setTimeStamp(data, appConfig.dataset_config.app__identifier)
     taskRes = distributeTask(data["method"])(data)
-    freeLock(jobLock)
     gc.collect()
-    #ppr.pprint("memory usage: rss (%dM) and vms (%dM)"%(int(psutil.Process().memory_info().rss / 1024 **2),
-    #                                                    int(psutil.Process().memory_info().vms / 1024 **2)))
     return taskRes
   except Exception as e:
-    freeLock(jobLock)
     return 'ERROR @server: '+traceback.format_exc()
 
 import server.app.app as app

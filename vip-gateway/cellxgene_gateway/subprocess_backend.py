@@ -8,6 +8,8 @@
 # the specific language governing permissions and limitations under the License.
 
 import logging
+import os
+import stat
 import subprocess
 from http import HTTPStatus
 
@@ -22,6 +24,19 @@ logger = logging.getLogger(__name__)
 class SubprocessBackend:
     def __init__(self):
         pass
+
+    def _fix_dir_permissions(self, dir_path):
+        """Ensure directory is writable by current process and its children."""
+        try:
+            if not os.path.exists(dir_path):
+                os.makedirs(dir_path, mode=0o777, exist_ok=True)
+            else:
+                current = stat.S_IMODE(os.stat(dir_path).st_mode)
+                if not (current & stat.S_IWUSR and current & stat.S_IWGRP):
+                    os.chmod(dir_path, current | stat.S_IWUSR | stat.S_IWGRP)
+                    logger.info(f"Fixed permissions on {dir_path} (was {oct(current)})")
+        except (OSError, PermissionError) as e:
+            logger.warning(f"Could not fix permissions on {dir_path}: {e}")
 
     def create_cmd(self, cellxgene_loc, file_path, port, scripts, annotation_file_path):
         if enable_annotations and not annotation_file_path is None:
@@ -59,6 +74,12 @@ class SubprocessBackend:
             scripts,
             cache_entry.key.annotation_file_path,
         )
+
+        # Ensure annotation directory is writable by current process (uid 1999)
+        if enable_annotations and cache_entry.key.annotation_file_path == "":
+            ann_dir = make_annotations(cache_entry.key.file_path)
+            self._fix_dir_permissions(ann_dir)
+
         logger.info(f"launching {cmd}")
         process = subprocess.Popen(
             [cmd], stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True

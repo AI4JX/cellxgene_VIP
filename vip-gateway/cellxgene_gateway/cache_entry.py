@@ -16,6 +16,7 @@ from enum import Enum
 import psutil
 from flask import make_response, render_template, request
 from flask.wrappers import Response
+import requests
 from requests import get, post, put
 
 from cellxgene_gateway import env
@@ -193,23 +194,25 @@ class CacheEntry:
         cellxgene_response = None
         try:
             if request.method in ["GET", "HEAD", "OPTIONS"]:
-                cellxgene_response = get(full_path, headers=headers)
+                cellxgene_response = get(full_path, headers=headers, timeout=(10, 900))
             elif request.method == "PUT":
                 cellxgene_response = put(
                     full_path,
                     headers=headers,
                     data=request.data,
+                    timeout=(10, 900),
                 )
             elif request.method == "POST":
                 cellxgene_response = post(
                     full_path,
                     headers=headers,
                     data=request.data,
+                    timeout=(10, 900),
                 )
             else:
                 raise CellxgeneException(f"Unexpected method {request.method}", 400)
             content_type = cellxgene_response.headers["content-type"]
-            if subpath.rstrip("/") == "/config" and "json" in content_type:
+            if subpath.rstrip("/").endswith("/config") and "json" in content_type:
                 gateway_content = self._inject_default_embedding(
                     cellxgene_response.content.decode()
                 )
@@ -229,6 +232,29 @@ class CacheEntry:
                 gateway_content,
                 cellxgene_response.status_code,
                 resp_headers,
+            )
+        except requests.exceptions.ConnectionError:
+            logger.error(f"Backend unreachable at {full_path}, marking entry as error")
+            self.set_error("Backend process is not responding", None, 502)
+            return make_response(
+                json.dumps({"error": "Backend process is not responding. It may have crashed or restarted. Please refresh the page."}),
+                502,
+                {"content-type": "application/json"},
+            )
+        except requests.exceptions.Timeout:
+            logger.error(f"Backend timeout at {full_path}")
+            self.set_error("Backend request timed out", None, 504)
+            return make_response(
+                json.dumps({"error": "Backend request timed out. The operation may be too heavy for current resources."}),
+                504,
+                {"content-type": "application/json"},
+            )
+        except Exception as e:
+            logger.error(f"Unexpected error proxying to backend: {e}")
+            return make_response(
+                json.dumps({"error": f"Backend proxy error: {e}"}),
+                502,
+                {"content-type": "application/json"},
             )
         finally:
             if cellxgene_response is not None:

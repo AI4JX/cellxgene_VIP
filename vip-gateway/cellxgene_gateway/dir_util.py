@@ -8,6 +8,7 @@
 # the specific language governing permissions and limitations under the License.
 
 import os
+import stat
 
 from cellxgene_gateway import env
 from cellxgene_gateway.cellxgene_exception import CellxgeneException
@@ -26,7 +27,15 @@ def make_annotations(el):
 
 def ensure_dir_exists(file_path):
     if not os.path.exists(file_path):
-        os.makedirs(file_path)
+        os.makedirs(file_path, mode=0o777, exist_ok=True)
+    else:
+        # Ensure existing dirs are group-writable (uid 1999 may need to write)
+        try:
+            current = stat.S_IMODE(os.stat(file_path).st_mode)
+            if not current & stat.S_IWGRP:
+                os.chmod(file_path, current | stat.S_IWGRP | stat.S_IXGRP)
+        except (OSError, PermissionError):
+            pass
 
 
 def vipconfig_path(h5ad_path):

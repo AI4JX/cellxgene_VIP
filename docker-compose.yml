@@ -4,19 +4,28 @@ services:
     build:
       context: .
     command: gateway
+    shm_size: '64g'
+    tmpfs:
+      - /tmp:size=2g
     volumes:
       - /mnt/DATA_VM/cellxgene_data:/datasets
-      - ./gateway-data:/home/BxGenomics/.gateway
+      - gateway-data:/home/BxGenomics/.gateway
     environment:
       - GATEWAY_PORT=5005
       - GATEWAY_ENABLE_ANNOTATIONS=true
-      - GATEWAY_ENABLE_BACKED_MODE=true
+      - GATEWAY_ENABLE_BACKED_MODE=false
       - GATEWAY_EXPIRE_SECONDS=3600
       - CELLXGENE_DATA=/datasets
       - GATEWAY_DB_PATH=/home/BxGenomics/.gateway/gateway.db
       - GATEWAY_SECRET_KEY=change-me-to-a-random-secret-in-production
       - GATEWAY_ADMIN_USER=admin
       - GATEWAY_ADMIN_PASSWORD=changeme
+      - OMP_NUM_THREADS=1
+      - OPENBLAS_NUM_THREADS=1
+      - MKL_NUM_THREADS=1
+      - NUMEXPR_NUM_THREADS=1
+      - MKL_THREADING_LAYER=sequential
+      - PYTHONFAULTHANDLER=1
     restart: unless-stopped
     networks:
       - vip-net
@@ -32,6 +41,9 @@ services:
     restart: unless-stopped
     networks:
       - vip-net
+
+volumes:
+  gateway-data:
 
 networks:
   vip-net:

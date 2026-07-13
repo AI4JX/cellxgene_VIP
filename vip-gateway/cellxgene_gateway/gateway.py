@@ -688,14 +688,26 @@ def api_bake_annotation(descriptor, name):
     try:
         import pandas as pd
         import anndata
+        import tempfile
+        import time
 
-        ann_df = pd.read_csv(ann_file, index_col=0)
+        ann_df = pd.read_csv(ann_file, index_col=0, comment='#')
         adata = anndata.read_h5ad(full_path)
 
         for col in ann_df.columns:
             adata.obs[col] = ann_df[col]
 
-        adata.write_h5ad(full_path)
+        # Write to temp file then atomic replace to avoid truncation on failure
+        dir_name = os.path.dirname(full_path) or '.'
+        with tempfile.NamedTemporaryFile(dir=dir_name, suffix='.h5ad', delete=False) as tmp:
+            tmp_path = tmp.name
+        try:
+            adata.write_h5ad(tmp_path)
+            os.replace(tmp_path, full_path)
+        except Exception:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+            raise
 
         os.remove(ann_file)
         gene_sets_file = ann_file.replace(".csv", "_gene_sets.csv")
@@ -892,7 +904,7 @@ def launch():
     app.extensions.setdefault("cellxgene_gateway", {})[
         "launchtime"
     ] = current_time_stamp()
-    app.run(host="0.0.0.0", port=env.gateway_port, debug=False)
+    app.run(host="0.0.0.0", port=env.gateway_port, debug=False, threaded=True)
 
 
 app.extensions.setdefault("cellxgene_gateway", {})["launchtime"] = None
