@@ -98,7 +98,8 @@
     function annLink(a) {
       const url = '/view/' + encodeURIComponent(annSubpath + '/' + a) + '/';
       const display = a.endsWith('.csv') ? a.slice(0, -4) : a;
-      return '<a href="' + url + '" class="small" target="_blank">' + display + '</a>';
+      return '<a href="' + url + '" class="small" target="_blank">' + display + '</a>' +
+        ' <button class="btn btn-outline-warning btn-sm py-0 px-1 bake-btn" data-descriptor="' + ds.descriptor + '" data-source="' + sn + '" data-annotation-name="' + a + '" title="Write to h5ad"><i class="bi bi-fire"></i></button>';
     }
     const newLink = '<a href="#" class="new-annotation small" data-descriptor="' + ds.descriptor + '" data-source="' + sn + '" data-annotation-subpath="' + annSubpath + '">+ New</a>';
     if (!ds.annotations || ds.annotations.length === 0) {
@@ -132,6 +133,7 @@
       <button class="btn btn-outline-danger btn-sm stop-btn" data-descriptor="${ds.descriptor}" data-source="${sn}" ${!isLoaded && !isLoading && !isLaunching ? 'disabled' : ''}><i class="bi bi-stop-fill"></i></button>
       ${isAdmin ? '<button class="btn btn-outline-info btn-sm move-btn" data-descriptor="' + ds.descriptor + '" data-source="' + ds.source + '" title="Move to folder"><i class="bi bi-folder-symlink"></i></button>' : ''}
       <button class="btn btn-outline-danger btn-sm delete-btn" data-descriptor="${ds.descriptor}" data-source="${sn}"><i class="bi bi-trash"></i></button>
+      <button class="btn btn-outline-secondary btn-sm settings-btn" data-descriptor="${ds.descriptor}" data-source="${sn}" title="Default embedding"><i class="bi bi-gear"></i></button>
     </div>`;
   }
 
@@ -210,12 +212,20 @@
             ${datasets.map(ds => {
               return `<div class="dataset-card" data-descriptor="${ds.descriptor}">
                 <div class="card-title">
-                  <a href="/view/${encodeURIComponent(ds.descriptor)}/" class="text-decoration-none">${ds.name}</a>
+                  <a href="/view/${encodeURIComponent(ds.descriptor)}/" class="text-decoration-none" target="_blank">${ds.name}</a>
                 </div>
                 <div class="card-meta">${formatSize(ds.size)} \u00b7 ${formatTime(ds.mtime)}</div>
                 ${statusBadge(ds)}
                 ${annotationsHtml(ds)}
                 ${actionButtons(ds)}
+                <div class="settings-panel mt-2" id="settings-${ds.descriptor.replace(/[^a-zA-Z0-9_-]/g, '_')}" style="display:none">
+                  <div class="input-group input-group-sm">
+                    <label class="input-group-text">Default embedding</label>
+                    <select class="form-select form-select-sm emb-select" data-descriptor="${ds.descriptor}" data-source="${ds.source || ''}"></select>
+                    <button class="btn btn-outline-primary btn-sm emb-save-btn" data-descriptor="${ds.descriptor}" data-source="${ds.source || ''}">Save</button>
+                  </div>
+                  <div class="form-text emb-status small"></div>
+                </div>
               </div>`;
             }).join('')}
           </div>
@@ -342,6 +352,93 @@
             }
           })
           .catch(() => alert('Failed to create annotation'));
+      });
+    });
+
+    document.querySelectorAll('.bake-btn').forEach(btn => {
+      btn.addEventListener('click', function () {
+        const desc = this.dataset.descriptor;
+        const sn = this.dataset.source || '';
+        const annName = this.dataset.annotationName;
+        if (!confirm('Write "' + annName + '" into h5ad and delete the CSV?')) return;
+        const self = this;
+        self.disabled = true;
+        self.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+        fetch('/api/dataset/' + encodeURIComponent(desc) + '/annotations/' + encodeURIComponent(annName) + '/bake' + sn, { method: 'POST' })
+          .then(r => r.json())
+          .then(data => {
+            if (data.ok) {
+              self.innerHTML = '<i class="bi bi-check-lg text-success"></i>';
+              setTimeout(fetchDatasets, 500);
+            } else {
+              alert('Bake failed: ' + (data.error || 'unknown'));
+              self.disabled = false;
+              self.innerHTML = '<i class="bi bi-fire"></i>';
+            }
+          })
+          .catch(() => { alert('Bake failed'); self.disabled = false; self.innerHTML = '<i class="bi bi-fire"></i>'; });
+      });
+    });
+
+    document.querySelectorAll('.settings-btn').forEach(btn => {
+      btn.addEventListener('click', function () {
+        const desc = this.dataset.descriptor;
+        const sn = this.dataset.source || '';
+        const panelId = 'settings-' + desc.replace(/[^a-zA-Z0-9_-]/g, '_');
+        const panel = document.getElementById(panelId);
+        if (!panel) return;
+        const isVisible = panel.style.display !== 'none';
+        document.querySelectorAll('.settings-panel').forEach(p => p.style.display = 'none');
+        if (isVisible) return;
+        panel.style.display = '';
+        const sel = panel.querySelector('.emb-select');
+        const status = panel.querySelector('.emb-status');
+        status.textContent = 'Loading...';
+        fetch('/api/dataset/' + encodeURIComponent(desc) + '/embeddings' + sn)
+          .then(r => r.json())
+          .then(data => {
+            if (!data.ok) { status.textContent = data.error || 'Failed'; return; }
+            sel.innerHTML = '<option value="">None</option>';
+            data.embeddings.forEach(e => {
+              const opt = document.createElement('option');
+              opt.value = e; opt.textContent = e;
+              sel.appendChild(opt);
+            });
+            return fetch('/api/dataset/' + encodeURIComponent(desc) + '/config' + sn);
+          })
+          .then(r => r ? r.json() : null)
+          .then(data => {
+            if (data && data.ok && data.default_embedding) {
+              sel.value = data.default_embedding;
+              status.textContent = 'Current: ' + data.default_embedding;
+            } else {
+              status.textContent = 'Current: none';
+            }
+          })
+          .catch(() => { status.textContent = 'Failed to load'; });
+      });
+    });
+
+    document.querySelectorAll('.emb-save-btn').forEach(btn => {
+      btn.addEventListener('click', function () {
+        const desc = this.dataset.descriptor;
+        const sn = this.dataset.source || '';
+        const panel = this.closest('.settings-panel');
+        const sel = panel.querySelector('.emb-select');
+        const status = panel.querySelector('.emb-status');
+        const val = sel.value || null;
+        status.textContent = 'Saving...';
+        fetch('/api/dataset/' + encodeURIComponent(desc) + '/config' + sn, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ default_embedding: val })
+        })
+          .then(r => r.json())
+          .then(data => {
+            if (data.ok) status.textContent = val ? 'Saved: ' + val : 'Saved: none (default)';
+            else status.textContent = 'Failed: ' + (data.error || 'unknown');
+          })
+          .catch(() => { status.textContent = 'Save failed'; });
       });
     });
   }

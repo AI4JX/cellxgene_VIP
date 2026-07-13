@@ -6,7 +6,7 @@ services:
     command: gateway
     volumes:
       - /mnt/DATA_VM/cellxgene_data:/datasets
-      - gateway-config:/home/BxGenomics/.gateway
+      - ./gateway-data:/home/BxGenomics/.gateway
     environment:
       - GATEWAY_PORT=5005
       - GATEWAY_ENABLE_ANNOTATIONS=true
@@ -32,9 +32,6 @@ services:
     restart: unless-stopped
     networks:
       - vip-net
-
-volumes:
-  gateway-config:
 
 networks:
   vip-net:

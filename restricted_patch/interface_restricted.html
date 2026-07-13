@@ -1953,6 +1953,14 @@ function enableButton(){
     //console.log(d.getTime());
 }
 
+// Early VIP global initialization (in case init() partially fails)
+if (!window.accumulateCell) window.accumulateCell={celllist1:[],celllist2:[],cellaccumu:false};
+if (!window.figOpt) window.figOpt={scale:'No',scaleZero:'No',clipValue:'Yes',scaleMax:20,dpi:150,img:'png',fontsize:11,vectorFriendly:'Yes',transparent:'No',scanpybranch:'split_show',colorMap:'viridis_r'};
+if (!window.bioCombine) window.bioCombine={};
+if (!window.bioCombineCell) window.bioCombineCell={};
+if (!window.biogen) window.biogen=[];
+if (!window.bioGeneGrp) window.bioGeneGrp={};
+
 enableButton();
 
 function dragElement( element, direction){
@@ -2059,6 +2067,7 @@ function saveImg(pngID){
   a.click();
 }
 function cellNupdate(){
+  if (!window.accumulateCell) return;
   var n={'celllist1':0,'celllist2':0};
   var curCells = {};
   for(const one of Object.keys(n)){
@@ -2079,6 +2088,7 @@ function cellNupdate(){
   });
 }
 function getCells(eID,sep=false){
+  if (!window.accumulateCell) return sep ? {} : new Int32Array(0);
   var cells={'celllist1':[],'celllist2':[]}, cellKey = Object.keys(cells);
   for(const one of cellKey){
     if(eID==null || $('.'+eID+'[value="'+one+'"]').prop('checked')){
@@ -2363,19 +2373,22 @@ function init(){
     $("#panel-right").prop('style')['width'] = "80%";
     //--------------------------------------------------------------------------
     //ABBRinit
-    var grps = Object.keys(window.store.getState().categoricalSelection).sort();
-    var grpL = window.store.getState().annoMatrix.schema.annotations.obsByName;
+    var st = window.store.getState();
+    var grps = Object.keys(st.categoricalSelection || {}).sort();
+    var grpL = (st.annoMatrix && st.annoMatrix.schema && st.annoMatrix.schema.annotations) ? st.annoMatrix.schema.annotations.obsByName : {};
     var htmlCheck= "";
     for(i=0;i<grps.length;i++){
       var one = grps[i];
       if (one.startsWith(">")) continue;
-      htmlCheck += '<label><input class="ABBRgrps" type="checkbox" value="'+grps[i]+'" onclick="ABBRlist(\'ABBR\')"/> '+grps[i]+' ('+grpL[grps[i]].categories.length+')</label>';
+      if (!grpL[one] || !grpL[one].categories) continue;
+      htmlCheck += '<label><input class="ABBRgrps" type="checkbox" value="'+grps[i]+'" onclick="ABBRlist(\'ABBR\')"/> '+grps[i]+' ('+grpL[one].categories.length+')</label>';
     }
     $('#ABBRgrp').html(htmlCheck);
     $('#ABBRcomBgrp').html(htmlCheck.replaceAll('ABBR','ABBRcomB'));
 
     var bioAbbr = {}
     for(i=0;i<grps.length;i++){
+      if (!grpL[grps[i]] || !grpL[grps[i]].categories) continue;
       var one = {}
       for(var j=0;j<grpL[grps[i]].categories.length;j++){
         if (grpL[grps[i]].categories[j] != null) {
@@ -2440,8 +2453,9 @@ function init(){
     var embedLay = document.getElementById("EMBEDlayout");
     var dualLay = document.getElementById("DUALlayout");
     htmlCheck="";
-    for(const ix of Object.keys(window.store.getState().annoMatrix.schema.layout.obs)){
-      var one = window.store.getState().annoMatrix.schema.layout.obs[ix].name
+    var layoutObs = (st.annoMatrix && st.annoMatrix.schema && st.annoMatrix.schema.layout) ? st.annoMatrix.schema.layout.obs : {};
+    for(const ix of Object.keys(layoutObs)){
+      var one = layoutObs[ix].name
       embedLay.add(createOpt(one));
       dualLay.add(createOpt(one));
       htmlCheck += '<label><input class="eIDlayouts" type="checkbox" value="'+one+'"/> '+one+' </label>';
@@ -2452,6 +2466,7 @@ function init(){
     var iChar = 0, charCut=50;
     for(const one of grps){
       if (one.startsWith(">")) continue;
+      if (!grpL[one] || !grpL[one].categories) continue;
       if(iChar!=-1){
         iChar = iChar+one.length;
       }
@@ -2474,7 +2489,7 @@ function init(){
 
     //Continuous metadata
     htmlCheck= "";
-    var names = window.store.getState().annoMatrix.schema.annotations.obsByName;
+    var names = (st.annoMatrix && st.annoMatrix.schema && st.annoMatrix.schema.annotations) ? st.annoMatrix.schema.annotations.obsByName : {};
     iChar = 0;
     for(const one of Object.keys(names).filter(function(e) { return names[e].type != "categorical" && names[e].type != "string" ;})) {
       if(iChar!=-1){

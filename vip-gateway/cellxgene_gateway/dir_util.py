@@ -27,3 +27,8 @@ def make_annotations(el):
 def ensure_dir_exists(file_path):
     if not os.path.exists(file_path):
         os.makedirs(file_path)
+
+
+def vipconfig_path(h5ad_path):
+    """Return the sidecar .vipconfig.json path for a given h5ad file."""
+    return os.path.splitext(h5ad_path)[0] + ".vipconfig.json"

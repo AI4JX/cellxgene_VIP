@@ -7,7 +7,9 @@
 # OR CONDITIONS OF ANY KIND, either express or implied. See the License for
 # the specific language governing permissions and limitations under the License.
 import datetime
+import json
 import logging
+import os
 import re
 from enum import Enum
 
@@ -18,6 +20,7 @@ from requests import get, post, put
 
 from cellxgene_gateway import env
 from cellxgene_gateway.cellxgene_exception import CellxgeneException
+from cellxgene_gateway.dir_util import vipconfig_path
 from cellxgene_gateway.flask_util import querystring
 from cellxgene_gateway.util import current_time_stamp
 
@@ -130,6 +133,25 @@ class CacheEntry:
     def cellxgene_basepath(self):
         return f"http://127.0.0.1:{self.port}"
 
+    def _inject_default_embedding(self, json_str):
+        """Inject default_embedding from sidecar .vipconfig.json into /config JSON."""
+        try:
+            config = json.loads(json_str)
+        except (json.JSONDecodeError, TypeError):
+            return json_str
+        try:
+            cfg_path = vipconfig_path(self.key.file_path)
+            if os.path.isfile(cfg_path):
+                with open(cfg_path) as f:
+                    sidecar = json.load(f)
+                embedding = sidecar.get("default_embedding")
+                if embedding:
+                    config.setdefault("config", {}).setdefault("parameters", {})
+                    config["config"]["parameters"]["default_embedding"] = embedding
+        except Exception:
+            pass
+        return json.dumps(config)
+
     def serve_content(self, path):
         gateway_basepath = self.key.gateway_basepath()
         subpath = path[len(self.key.descriptor) :]  # noqa: E203
@@ -187,7 +209,11 @@ class CacheEntry:
             else:
                 raise CellxgeneException(f"Unexpected method {request.method}", 400)
             content_type = cellxgene_response.headers["content-type"]
-            if "text" in content_type:
+            if subpath.rstrip("/") == "/config" and "json" in content_type:
+                gateway_content = self._inject_default_embedding(
+                    cellxgene_response.content.decode()
+                )
+            elif "text" in content_type:
                 gateway_content = self.rewrite_text_content(
                     cellxgene_response.content.decode()
                 )

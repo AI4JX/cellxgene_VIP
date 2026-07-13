@@ -35,7 +35,15 @@ enable_backed_mode = os.environ.get("GATEWAY_ENABLE_BACKED_MODE", "").lower() in
     "1",
 ]
 log_level = logging.getLevelName(os.environ.get("GATEWAY_LOG_LEVEL", "INFO"))
-db_path = os.environ.get("GATEWAY_DB_PATH", "")
+_raw_db_path = os.environ.get("GATEWAY_DB_PATH", "")
+if not _raw_db_path:
+    _raw_db_path = os.path.expanduser("~/.gateway/gateway.db")
+    logging.getLogger("cellxgene_gateway").warning(
+        "GATEWAY_DB_PATH not set; falling back to %s. "
+        "Set GATEWAY_DB_PATH to a persistent location to avoid data loss on restart.",
+        _raw_db_path,
+    )
+db_path = _raw_db_path
 secret_key = os.environ.get("GATEWAY_SECRET_KEY", "")
 admin_user = os.environ.get("GATEWAY_ADMIN_USER", "")
 admin_password = os.environ.get("GATEWAY_ADMIN_PASSWORD", "")
@@ -61,6 +69,7 @@ optional_env_vars = {
     "GATEWAY_LOG_LEVEL": log_level,
     "CELLXGENE_ARGS": cellxgene_args,
     "CELLXGENE_DATA": cellxgene_data,
+    "GATEWAY_DB_PATH": db_path,
     "PROXY_FIX_FOR": proxy_fix_for,
     "PROXY_FIX_PROTO": proxy_fix_proto,
     "PROXY_FIX_HOST": proxy_fix_host,

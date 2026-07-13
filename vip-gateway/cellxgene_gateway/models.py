@@ -1,6 +1,7 @@
 import os
 import sqlite3
 import threading
+import logging
 from werkzeug.security import generate_password_hash, check_password_hash
 
 _local = threading.local()
@@ -8,9 +9,10 @@ _local = threading.local()
 
 def _get_db(db_path):
     if not hasattr(_local, "conn") or _local.conn is None:
-        _local.conn = sqlite3.connect(db_path)
+        _local.conn = sqlite3.connect(db_path, timeout=10)
         _local.conn.row_factory = sqlite3.Row
         _local.conn.execute("PRAGMA journal_mode=WAL")
+        _local.conn.execute("PRAGMA synchronous=NORMAL")
         _local.conn.execute("PRAGMA foreign_keys=ON")
     return _local.conn
 
@@ -24,6 +26,11 @@ def init_db(db_path=None):
     if db_path is None:
         import cellxgene_gateway.env as env
         db_path = env.db_path
+    if not db_path or db_path == ":memory:":
+        raise ValueError(
+            "GATEWAY_DB_PATH is empty or :memory:. "
+            "Set GATEWAY_DB_PATH to a persistent file path to avoid data loss on restart."
+        )
     os.makedirs(os.path.dirname(db_path), exist_ok=True)
     conn = _get_db(db_path)
     conn.executescript("""
@@ -145,3 +152,18 @@ def is_dataset_visible(user_id, subfolder, all_users):
         return True
     allowed = [r["folder_path"] for r in rows]
     return subfolder in allowed
+
+
+def checkpoint_db():
+    """Force WAL checkpoint to flush pending writes to the main db file.
+
+    Call this on graceful shutdown to minimize the risk of uncommitted WAL
+    data being lost when the container is stopped.
+    """
+    try:
+        db = get_db()
+        db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    except Exception:
+        logging.getLogger("cellxgene_gateway").warning(
+            "WAL checkpoint failed", exc_info=True
+        )

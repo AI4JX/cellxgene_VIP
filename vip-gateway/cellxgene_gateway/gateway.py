@@ -6,6 +6,7 @@
 # under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES
 # OR CONDITIONS OF ANY KIND, either express or implied. See the License for
 # the specific language governing permissions and limitations under the License.
+import atexit
 import datetime
 import json
 import logging
@@ -29,7 +30,7 @@ from flask import (
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from cellxgene_gateway import env, flask_util, models
-from cellxgene_gateway.dir_util import annotations_suffix
+from cellxgene_gateway.dir_util import annotations_suffix, vipconfig_path
 from cellxgene_gateway.auth import auth_bp, login_required, admin_required
 from cellxgene_gateway.backend_cache import BackendCache
 from cellxgene_gateway.cache_entry import CacheEntryStatus
@@ -289,6 +290,7 @@ def matching_source(source_name):
 @app.route("/view/<path:path>", methods=["GET", "PUT", "POST"])
 @login_required
 def do_view(path, source_name=None):
+    path = urllib.parse.unquote(path)
     source = matching_source(source_name)
     match = cache.check_path(source, path)
 
@@ -359,6 +361,7 @@ def do_GET_status_json():
 
 
 def get_cache_key(path):
+    path = urllib.parse.unquote(path)
     if request.args.get("source_name"):
         source_name = request.args.get("source_name")
     elif default_item_source:
@@ -500,6 +503,7 @@ def _source_full_path(source, descriptor):
 @app.route("/api/dataset/<path:descriptor>/launch", methods=["POST"])
 @login_required
 def api_launch(descriptor):
+    descriptor = urllib.parse.unquote(descriptor)
     src = _get_source(request.args.get("source_name"))
     view_url = url_for("do_view", path=descriptor, source_name=src.name, _external=False)
     return jsonify({"ok": True, "redirect": view_url})
@@ -532,6 +536,7 @@ def api_relaunch(descriptor):
 @app.route("/api/dataset/<path:descriptor>/delete", methods=["POST"])
 @login_required
 def api_delete(descriptor):
+    descriptor = urllib.parse.unquote(descriptor)
     src = _get_source(request.args.get("source_name"))
     lookup = src.lookup(descriptor)
     if lookup is None:
@@ -559,6 +564,7 @@ def api_delete(descriptor):
 @app.route("/api/dataset/<path:descriptor>/annotations/new", methods=["POST"])
 @login_required
 def api_new_annotation(descriptor):
+    descriptor = urllib.parse.unquote(descriptor)
     name = request.args.get("name", "").strip()
     if not name:
         return jsonify({"ok": False, "error": "Annotation name required"}), 400
@@ -581,6 +587,127 @@ def api_new_annotation(descriptor):
         return jsonify({"ok": True, "name": name + ".csv"})
     else:
         return jsonify({"ok": False, "error": "Source does not support annotations"}), 400
+
+
+@app.route("/api/dataset/<path:descriptor>/embeddings", methods=["GET"])
+@login_required
+def api_embeddings(descriptor):
+    descriptor = urllib.parse.unquote(descriptor)
+    src = _get_source(request.args.get("source_name"))
+    full_path = _source_full_path(src, descriptor)
+    if not full_path or not os.path.isfile(full_path):
+        return jsonify({"ok": False, "error": "Dataset not found"}), 404
+    try:
+        import h5py
+        with h5py.File(full_path, "r") as f:
+            obsm = f.get("obsm")
+            embeddings = sorted(k for k in obsm.keys() if k.startswith("X_")) if obsm else []
+        embeddings = [k[2:] for k in embeddings]
+        return jsonify({"ok": True, "embeddings": embeddings})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/dataset/<path:descriptor>/config", methods=["GET"])
+@login_required
+def api_get_config(descriptor):
+    descriptor = urllib.parse.unquote(descriptor)
+    src = _get_source(request.args.get("source_name"))
+    full_path = _source_full_path(src, descriptor)
+    if not full_path:
+        return jsonify({"ok": False, "error": "Dataset not found"}), 404
+    cfg = {"default_embedding": None}
+    cfg_path = vipconfig_path(full_path)
+    if os.path.isfile(cfg_path):
+        try:
+            with open(cfg_path) as f:
+                cfg = json.load(f)
+        except Exception:
+            pass
+    return jsonify({"ok": True, **cfg})
+
+
+@app.route("/api/dataset/<path:descriptor>/config", methods=["POST"])
+@login_required
+def api_set_config(descriptor):
+    descriptor = urllib.parse.unquote(descriptor)
+    src = _get_source(request.args.get("source_name"))
+    full_path = _source_full_path(src, descriptor)
+    if not full_path:
+        return jsonify({"ok": False, "error": "Dataset not found"}), 404
+    data = request.get_json(silent=True) or {}
+    cfg_path = vipconfig_path(full_path)
+    cfg = {}
+    if os.path.isfile(cfg_path):
+        try:
+            with open(cfg_path) as f:
+                cfg = json.load(f)
+        except Exception:
+            pass
+    if "default_embedding" in data:
+        cfg["default_embedding"] = data["default_embedding"]
+    try:
+        with open(cfg_path, "w") as f:
+            json.dump(cfg, f)
+    except PermissionError:
+        return jsonify({"ok": False, "error": "Permission denied - check directory permissions"}), 403
+    return jsonify({"ok": True, **cfg})
+
+
+@app.route("/api/dataset/<path:descriptor>/annotations/<name>/bake", methods=["POST"])
+@login_required
+def api_bake_annotation(descriptor, name):
+    descriptor = urllib.parse.unquote(descriptor)
+    src = _get_source(request.args.get("source_name"))
+    lookup = src.lookup(descriptor)
+    if lookup is None:
+        return jsonify({"ok": False, "error": "Dataset not found"}), 404
+
+    full_path = _source_full_path(src, descriptor)
+    if not full_path or not os.path.isfile(full_path):
+        return jsonify({"ok": False, "error": "Dataset file not found"}), 404
+
+    ann_subpath = src.get_annotations_subpath(lookup.h5ad_item) if env.enable_annotations else None
+    if not ann_subpath:
+        return jsonify({"ok": False, "error": "Annotations not supported"}), 400
+
+    ann_dir = _source_full_path(src, ann_subpath)
+    ann_file = os.path.join(ann_dir, name)
+    if not ann_file.endswith(".csv"):
+        ann_file += ".csv"
+    if not os.path.isfile(ann_file):
+        return jsonify({"ok": False, "error": "Annotation file not found"}), 404
+
+    key = CacheKey.for_lookup(src, lookup)
+    match = cache.check_entry(key)
+    if match is not None:
+        match.terminate()
+    for entry in cache.find_entries_by_h5ad(key.h5ad_item.descriptor):
+        entry.terminate()
+
+    try:
+        import pandas as pd
+        import anndata
+
+        ann_df = pd.read_csv(ann_file, index_col=0)
+        adata = anndata.read_h5ad(full_path)
+
+        for col in ann_df.columns:
+            adata.obs[col] = ann_df[col]
+
+        adata.write_h5ad(full_path)
+
+        os.remove(ann_file)
+        gene_sets_file = ann_file.replace(".csv", "_gene_sets.csv")
+        if os.path.isfile(gene_sets_file):
+            os.remove(gene_sets_file)
+
+        if ann_dir and os.path.isdir(ann_dir) and not os.listdir(ann_dir):
+            os.rmdir(ann_dir)
+
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 
 @app.route("/metadata/ip_address", methods=["GET"])
@@ -759,6 +886,7 @@ def start_pruner_thread():
 
 
 def launch():
+    atexit.register(models.checkpoint_db)
     start_pruner_thread()
 
     app.extensions.setdefault("cellxgene_gateway", {})[
